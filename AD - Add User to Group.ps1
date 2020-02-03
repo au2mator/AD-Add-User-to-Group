@@ -400,10 +400,6 @@ Import-Module ActiveDirectory
 Write-au2matorLog -Type INFO -Text "Try to add User in Group"
 
 
-$c_User="CN=Test Test,OU=User,OU=Domain,DC=au2mator,DC=local"
-$c_Group="CN=Sales India,OU=EL India 2020,OU=Domain,DC=au2mator,DC=local"
-
-
 if (Get-ADGroupMember -Identity $c_Group | Where-Object -Property DistinguishedName -Value $c_User -EQ)
 {
     
