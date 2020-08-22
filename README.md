@@ -19,7 +19,7 @@ This Script can be used to Add a User in Group
 
 
 # Demo
-![Demo](/Demo/AD-Add User to Group_FULL.gif)
+![Demo](/Demo/AD-AddUsertoGroup_FULL.gif)
 
 
 # Changelog
