@@ -7,7 +7,9 @@ au2mator - Self Service Portal is providing a Frontend to trigger your Microsoft
 - <a href="https://www.au2mator.com/Powershell" target="_blank">Powershell</a>
 - System Center SMA
 
-This Script can be used to Add a User in Group
+This Script can be used to Add a User in Group!
+
+Get more Ideas for Active Directory Self Service: https://au2mator.com/Active-Directory/
 
 # Getting Started
 
@@ -25,12 +27,12 @@ This Script can be used to Add a User in Group
 # Changelog
 
 v1.1 - 22.08.2020
-    - Added Stored Credentials: https://au2mator.com/documentation/powershell-credentials/
-    - Readme
-    - Added SMTP Port
+ - Added Stored Credentials: https://au2mator.com/documentation/powershell-credentials/
+ - Readme
+ - Added SMTP Port
 
 v1.0 - 03.02.2020
-    - Initial Release
+ - Initial Release
 
 
 # Contribute
