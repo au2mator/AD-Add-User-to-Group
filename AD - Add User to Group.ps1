@@ -3,8 +3,11 @@
 # New Service
 # AD - Add User to Group
 # v 1.0 Initial Release
+# v 1.1 Added Stored Credentials
+    #see for details: https://au2mator.com/documentation/powershell-credentials/
+# v 1.1 Added SMTP Port
 # Init Release: 03.02.2020
-# Last Update: 03.02.2020
+# Last Update: 22.08.2020
 # Code Template V 1.1
 # URL: https://au2mator.com/add-user-to-group-active-directory-self-service-with-au2mator/
 # Github: https://github.com/au2mator/Add-User-to-Group
@@ -14,26 +17,26 @@
 #region InputParamaters
 ##Question in au2mator
 param (
-    [parameter(Mandatory = $true)] 
+    [parameter(Mandatory = $true)]
     [String]$c_User,
- 
-    [parameter(Mandatory = $true)] 
-    [String]$c_Group, 
 
-    [parameter(Mandatory = $false)] 
-    [String]$c_Comment, 
+    [parameter(Mandatory = $true)]
+    [String]$c_Group,
 
-## au2mator Initialize Data
-    [parameter(Mandatory = $true)] 
-    [String]$InitiatedBy, 
+    [parameter(Mandatory = $false)]
+    [String]$c_Comment,
 
-    [parameter(Mandatory = $true)] 
-    [String]$RequestId, 
- 
-    [parameter(Mandatory = $true)] 
-    [String]$Service, 
- 
-    [parameter(Mandatory = $true)] 
+    ## au2mator Initialize Data
+    [parameter(Mandatory = $true)]
+    [String]$InitiatedBy,
+
+    [parameter(Mandatory = $true)]
+    [String]$RequestId,
+
+    [parameter(Mandatory = $true)]
+    [String]$Service,
+
+    [parameter(Mandatory = $true)]
     [String]$TargetUserId
 )
 #endregion  InputParamaters
@@ -50,11 +53,12 @@ $ErrorCount = 0
 [string]$DCServer = 'svdc01'
 [string]$LogPath = "C:\_SCOworkingDir\TFS\PS-Services\AD - Add User to Group"
 [string]$LogfileName = "Add User to Group"
+[string]$CredentialStorePath = "C:\_SCOworkingDir\TFS\PS-Services\CredentialStore" #see for details: https://au2mator.com/documentation/powershell-credentials/
 
 ## au2mator Settings
 [string]$PortalURL = "http://demo01.au2mator.local"
 [string]$au2matorDBServer = "demo01"
-[string]$au2matorDBName = "au2mator"
+[string]$au2matorDBName = "au2matorNew"
 
 ## Control Mail
 $SendMailToInitiatedByUser = $true #Send a Mail after Service is completed
@@ -62,12 +66,31 @@ $SendMailToTargetUser = $true #Send Mail to Target User after Service is complet
 
 ## SMTP Settings
 $SMTPServer = "smtp.office365.com"
-$SMTPUser = "mail@au2mator.com"
-$SMTPPassword = "Password1"
 $SMPTAuthentication = $true #When True, User and Password needed
 $EnableSSLforSMTP = $true
-$SMTPSender = "mail@au2mator.com"
-#endregion Variaböes
+$SMTPSender = "SelfService@au2mator.com"
+$SMTPPort="587"
+
+# Stored Credentials
+# See: https://au2mator.com/documentation/powershell-credentials/
+$SMTPCredential_method = "Stored" #Stored, Manual
+#Use stored Credentials
+$SMTPcredential_File = "SMTPCreds.xml"
+#Use Manual Credentials
+$SMTPUser = ""
+$SMTPPassword = ""
+
+
+if ($SMTPCredential_method -eq "Stored") {
+    $SMTPcredential = Import-CliXml -Path (Get-ChildItem -Path $CredentialStorePath -Filter $SMTPcredential_File).FullName
+}
+
+if ($SMTPCredential_method -eq "Manual") {
+    $f_secpasswd = ConvertTo-SecureString $SMTPPassword -AsPlainText -Force
+    $SMTPcredential = New-Object System.Management.Automation.PSCredential ($SMTPUser, $f_secpasswd)
+}
+
+#endregion Variables
 
 #region Functions
 
@@ -90,12 +113,12 @@ function ConnectToDB {
 function ExecuteSqlQuery {
     # define parameters
     param(
-      
+
         [string]
         $sqlquery
-     
+
     )
-     
+
     Begin {
         If (!$Connection) {
             Throw "No connection to the database detected. Run command ConnectToDB first."
@@ -113,22 +136,22 @@ function ExecuteSqlQuery {
             }
         }
     }
-     
+
     Process {
         #$Command = New-Object System.Data.SQLClient.SQLCommand
         $command = $Connection.CreateCommand()
         $command.CommandText = $sqlquery
-     
+
         Write-Verbose "Running SQL query '$sqlquery'"
         try {
-            $result = $command.ExecuteReader()      
+            $result = $command.ExecuteReader()
         }
         catch {
             $Connection.Close()
         }
         $Datatable = New-Object "System.Data.Datatable"
         $Datatable.Load($result)
-        return $Datatable         
+        return $Datatable
     }
     End {
         Write-Verbose "Finished running SQL query."
@@ -143,7 +166,7 @@ function Write-au2matorLog {
         [string]$Type,
         [string]$Text
     )
-       
+
     # Set logging path
     if (!(Test-Path -Path $logPath)) {
         try {
@@ -165,19 +188,19 @@ function Write-au2matorLog {
 function Get-UserInput ($RequestID) {
     [hashtable]$return = @{ }
 
-    ConnectToDB -servername $au2matorDBServer -database $au2matorDBName 
+    ConnectToDB -servername $au2matorDBServer -database $au2matorDBName
 
     $Result = ExecuteSqlQuery -sqlquery "SELECT        RPM.Text AS Question, RP.Value
     FROM            dbo.Requests AS R INNER JOIN
                              dbo.RunbookParameterMappings AS RPM ON R.ServiceId = RPM.ServiceId INNER JOIN
                              dbo.RequestParameters AS RP ON RPM.ParameterName = RP.[Key] AND R.RequestId = RP.RequestId
     where RP.RequestId = '$RequestID' order by [Order]"
-    
+
     $html = "<table><tr><td><b>Question</b></td><td><b>Answer</b></td></tr>"
     $html = "<table>"
-    foreach ($row in $Result) { 
+    foreach ($row in $Result) {
         $row
-        $html += "<tr><td><b>" + $row.Question + "</b></td><td>" + $row.Value + "</td></tr>" 
+        $html += "<tr><td><b>" + $row.Question + "</b></td><td>" + $row.Value + "</td></tr>"
     }
     $html += "</table>"
 
@@ -209,7 +232,7 @@ Function Get-MailContent ($RequestID, $RequestTitle, $EndDate, $TargetUserId, $I
 
     $f_RequestID = $RequestID
     $f_InitiatedBy = $InitiatedBy
-    
+
     $f_RequestTitle = $RequestTitle
     $f_EndDate = $EndDate
     $f_RequestStatus = $Status
@@ -217,13 +240,13 @@ Function Get-MailContent ($RequestID, $RequestTitle, $EndDate, $TargetUserId, $I
     $f_RequestedBy = $RequestedBy
     $f_HTMLINFO = $AdditionalHTML
     $f_InputHTML = $InputHTML
-    
+
     $f_SamInitiatedBy = $f_InitiatedBy.Split("\")[1]
     $f_UserInitiatedBy = Get-ADUser -Identity $f_SamInitiatedBy -Properties DisplayName
     $f_DisplaynameInitiatedBy = $f_UserInitiatedBy.DisplayName
 
-    
-    $HTML = @'    
+
+    $HTML = @'
     <table class="MsoNormalTable" style="width: 100.0%; mso-cellspacing: 1.5pt; background: #F7F8F3; mso-yfti-tbllook: 1184;" border="0" width="100%" cellpadding="0">
     <tbody>
     <tr style="mso-yfti-irow: 0; mso-yfti-firstrow: yes; mso-yfti-lastrow: yes;">
@@ -359,24 +382,21 @@ function Send-ServiceMail ($HTMLBody, $ServiceName, $Recipient, $RequestID, $Req
     $f_Subject = "au2mator - $ServiceName Request [$RequestID] - $RequestStatus"
 
     if ($SMPTAuthentication) {
-        $f_secpasswd = ConvertTo-SecureString $SMTPPassword -AsPlainText -Force
-        $f_mycreds = New-Object System.Management.Automation.PSCredential ($SMTPUser, $f_secpasswd)
-    
         if ($EnableSSLforSMTP) {
-            Send-MailMessage -SmtpServer $SMTPServer -To $Recipient -From $SMTPSender -Subject $f_Subject -Body $HTMLBody -BodyAsHtml -Priority high -Credential $f_mycreds -UseSsl
+            Send-MailMessage -SmtpServer $SMTPServer -To $Recipient -From $SMTPSender -Subject $f_Subject -Body $HTMLBody -BodyAsHtml -Priority high -Credential $SMTPcredential -UseSsl -Port $SMTPPort
         }
         else {
-            Send-MailMessage -SmtpServer $SMTPServer -To $Recipient -From $SMTPSender -Subject $f_Subject -Body $HTMLBody -BodyAsHtml -Priority high -Credential $f_mycreds
+            Send-MailMessage -SmtpServer $SMTPServer -To $Recipient -From $SMTPSender -Subject $f_Subject -Body $HTMLBody -BodyAsHtml -Priority high -Credential $SMTPcredential -Port $SMTPPort
         }
     }
     else {
         if ($EnableSSLforSMTP) {
-            Send-MailMessage -SmtpServer $SMTPServer -To $Recipient -From $SMTPSender -Subject $f_Subject -Body $HTMLBody -BodyAsHtml -Priority high -UseSsl
+            Send-MailMessage -SmtpServer $SMTPServer -To $Recipient -From $SMTPSender -Subject $f_Subject -Body $HTMLBody -BodyAsHtml -Priority high -UseSsl -Port $SMTPPort
         }
         else {
-            Send-MailMessage -SmtpServer $SMTPServer -To $Recipient -From $SMTPSender -Subject $f_Subject -Body $HTMLBody -BodyAsHtml -Priority high
-        } 
-    }   
+            Send-MailMessage -SmtpServer $SMTPServer -To $Recipient -From $SMTPSender -Subject $f_Subject -Body $HTMLBody -BodyAsHtml -Priority high -Port $SMTPPort
+        }
+    }
 }
 #endregion Functions
 
@@ -390,7 +410,7 @@ if ($DoImportPSSession) {
     Import-PSSession -Session $PSSession -DisableNameChecking -AllowClobber
 }
 else {
-        
+
 }
 
 Write-au2matorLog -Type INFO -Text "Import AD PS Module"
@@ -400,14 +420,13 @@ Import-Module ActiveDirectory
 Write-au2matorLog -Type INFO -Text "Try to add User in Group"
 
 
-if (Get-ADGroupMember -Identity $c_Group | Where-Object -Property DistinguishedName -Value $c_User -EQ)
-{
-    
+if (Get-ADGroupMember -Identity $c_Group | Where-Object -Property DistinguishedName -Value $c_User -EQ) {
+
     Write-au2matorLog -Type INFO -Text "User is already in Group"
 
     $au2matorReturn = "User $c_User is already in Group $c_Group"
-    $AdditionalHTML="<br>
-    User " + (Get-ADUser -identity $c_User).DisplayName +" was already a Member of the Group "+(Get-ADGroup -Identity $c_Group).DisplayName+"
+    $AdditionalHTML = "<br>
+    User " + (Get-ADUser -identity $c_User).DisplayName + " was already a Member of the Group " + (Get-ADGroup -Identity $c_Group).DisplayName + "
     <br>
     "
     $Status = "COMPLETED"
@@ -426,8 +445,8 @@ else {
 
     if ($ErrorCount -eq 0) {
         $au2matorReturn = "User $c_User added in Group $c_Group"
-        $AdditionalHTML="<br>
-        User " + (Get-ADUser -identity $c_User).DisplayName +" added in Group "+(Get-ADGroup -Identity $c_Group).DisplayName+"
+        $AdditionalHTML = "<br>
+        User " + (Get-ADUser -identity $c_User).DisplayName + " added in Group " + (Get-ADGroup -Identity $c_Group).DisplayName + "
         <br>
         "
         $Status = "COMPLETED"
@@ -442,14 +461,14 @@ else {
 
 #region Return
 ## return to au2mator Services
- 
+
 
 
 Write-au2matorLog -Type INFO -Text "Service finished"
 
 
 
-if ($SendMailToInitiatedByUser) {    
+if ($SendMailToInitiatedByUser) {
     Write-au2matorLog -Type INFO -Text "Send Mail to Initiated By User"
 
     $UserInput = Get-UserInput -RequestID $RequestId
@@ -458,7 +477,7 @@ if ($SendMailToInitiatedByUser) {
 }
 
 
-if ($SendMailToTargetUser) {    
+if ($SendMailToTargetUser) {
     Write-au2matorLog -Type INFO -Text "Send Mail to Target User"
 
     $UserInput = Get-UserInput -RequestID $RequestId
@@ -467,7 +486,7 @@ if ($SendMailToTargetUser) {
 }
 
 
-return $au2matorReturn    
+return $au2matorReturn
 #endregion Return
 
 
